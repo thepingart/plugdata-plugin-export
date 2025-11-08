@@ -8,64 +8,63 @@ env:
 
 jobs:
   macos-universal-build:
-  runs-on: macos-latest
+    runs-on: macos-latest
 
-  steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        submodules: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false  # avoid recursive checkout (Gem causes 500 errors)
 
-    - name: Init required submodules only
-      shell: bash
-      run: |
-        git submodule update --init plugdata
-        git -C plugdata submodule update --init Libraries/JUCE
+      - name: Init required submodules only
+        shell: bash
+        run: |
+          git submodule update --init plugdata
+          git -C plugdata submodule update --init Libraries/JUCE
 
-    - name: ccache
-      uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        key: macos
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: macos
 
-    - name: Build plugins
-      run: |
-        set -euxo pipefail
-        python3 ./build.py --compiler-launcher ccache
+      - name: Build plugins
+        run: |
+          set -euxo pipefail
+          python3 ./build.py --compiler-launcher ccache
 
-        # Inspect what was produced
-        echo "== Workspace content =="
-        ls -la
-        echo "== Build tree (top 3 levels) =="
-        find . -maxdepth 3 -type d -print
+          # Inspect what was produced
+          echo "== Workspace content =="
+          ls -la
+          echo "== Build tree (top 3 levels) =="
+          find . -maxdepth 3 -type d -print
 
-        # Some exporters put outputs inside subfolders; collect them
-        mkdir -p Build-macOS-Universal
+          # Collect outputs into a predictable folder
+          mkdir -p Build-macOS-Universal
 
-        # Copy common macOS bundles if they exist
-        find . -type d \( -name "*.app" -o -name "*.vst3" -o -name "*.component" -o -name "*.clap" -o -name "*.lv2" \) -print \
-          -exec cp -R {} Build-macOS-Universal/ \; || true
+          # Copy common macOS bundles if they exist
+          find . -type d \( -name "*.app" -o -name "*.vst3" -o -name "*.component" -o -name "*.clap" -o -name "*.lv2" \) -print \
+            -exec cp -R {} Build-macOS-Universal/ \; || true
 
-        # If the exporter produced a generic Build folder, keep it too
-        if [ -d Build ]; then
-          echo "Found generic Build/, moving to Build-macOS-Universal/"
-          # Move instead of copy to match your original intention
-          mv Build/* Build-macOS-Universal/ || true
-        fi
+          # If the exporter produced a generic Build folder, include it
+          if [ -d Build ]; then
+            echo "Found generic Build/, moving to Build-macOS-Universal/"
+            mv Build/* Build-macOS-Universal/ || true
+          fi
 
-        echo "== Staged artifacts =="
-        find Build-macOS-Universal -maxdepth 2 -print || true
+          echo "== Staged artifacts =="
+          find Build-macOS-Universal -maxdepth 2 -print || true
 
-    - name: Archive Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: Build-macOS-Universal
-        path: Build-macOS-Universal/**
-        if-no-files-found: warn
-        compression-level: 0
-
+      - name: Archive Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Build-macOS-Universal
+          path: Build-macOS-Universal/**
+          if-no-files-found: warn
+          compression-level: 0
 
   windows-64-build:
     runs-on: windows-2022
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -94,14 +93,22 @@ jobs:
       - name: Build plugins
         shell: bash
         run: |
+          set -euxo pipefail
           python3 ./build.py --compiler-launcher ccache
-          mv Build Build-Win64
+          mkdir -p Build-Win64
+          # Collect common Windows plugin bundles (if any specific structure exists, adjust here)
+          if [ -d Build ]; then
+            mv Build/* Build-Win64/ || true
+          fi
+          echo "== Staged artifacts (Win64) =="
+          find Build-Win64 -maxdepth 2 -print || true
 
       - name: Archive Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Build-Win64
-          path: Build-Win64
+          path: Build-Win64/**
+          if-no-files-found: warn
 
   windows-32-build:
     runs-on: windows-2022
@@ -134,14 +141,21 @@ jobs:
       - name: Build plugins
         shell: bash
         run: |
+          set -euxo pipefail
           python3 ./build.py --compiler-launcher ccache
-          mv Build Build-Win32
+          mkdir -p Build-Win32
+          if [ -d Build ]; then
+            mv Build/* Build-Win32/ || true
+          fi
+          echo "== Staged artifacts (Win32) =="
+          find Build-Win32 -maxdepth 2 -print || true
 
       - name: Archive Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Build-Win32
-          path: Build-Win32
+          path: Build-Win32/**
+          if-no-files-found: warn
 
   linux-x64-build:
     name: ${{ matrix.name }}
@@ -207,7 +221,7 @@ jobs:
           git -C plugdata submodule update --init Libraries/JUCE
 
       - name: Update cmake
-        working-directory: ${{github.workspace}}
+        working-directory: ${{ github.workspace }}
         run: ./.github/scripts/install-cmake.sh
 
       - name: ccache
@@ -217,14 +231,21 @@ jobs:
 
       - name: Build plugins
         run: |
+          set -euxo pipefail
           python3 ./build.py --compiler-launcher ccache
-          mv Build Build-${{ matrix.name }}
+          mkdir -p Build-${{ matrix.name }}
+          if [ -d Build ]; then
+            mv Build/* Build-${{ matrix.name }}/ || true
+          fi
+          echo "== Staged artifacts (${ { matrix.name }} ) =="
+          find Build-${{ matrix.name }} -maxdepth 2 -print || true
 
       - name: Archive Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Build-${{ matrix.name }}
-          path: Build-${{ matrix.name }}
+          path: Build-${{ matrix.name }}/**
+          if-no-files-found: warn
 
   linux-arm-build:
     name: ${{ matrix.name }}
@@ -276,7 +297,7 @@ jobs:
           git -C plugdata submodule update --init Libraries/JUCE
 
       - name: Update cmake
-        working-directory: ${{github.workspace}}
+        working-directory: ${{ github.workspace }}
         run: ./.github/scripts/install-cmake.sh
 
       - name: ccache
@@ -286,12 +307,18 @@ jobs:
 
       - name: Build plugins
         run: |
+          set -euxo pipefail
           python3 ./build.py --compiler-launcher ccache
-          mv Build Build-${{ matrix.name }}
+          mkdir -p Build-${{ matrix.name }}
+          if [ -d Build ]; then
+            mv Build/* Build-${{ matrix.name }}/ || true
+          fi
+          echo "== Staged artifacts (${ { matrix.name }} ) =="
+          find Build-${{ matrix.name }} -maxdepth 2 -print || true
 
       - name: Archive Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Build-${{ matrix.name }}
-          path: Build-${{ matrix.name }}
-
+          path: Build-${{ matrix.name }}/**
+          if-no-files-found: warn
