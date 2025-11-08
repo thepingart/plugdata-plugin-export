@@ -19,6 +19,7 @@ jobs:
       - name: Init required submodules only
         shell: bash
         run: |
+          set -euxo pipefail
           git submodule update --init plugdata
           git -C plugdata submodule update --init Libraries/JUCE
 
@@ -28,38 +29,47 @@ jobs:
           key: macos
 
       - name: Build plugins
+        shell: bash
         run: |
           set -euxo pipefail
-          python3 ./build.py --compiler-launcher ccache
+          # Run the build and capture a log
+          python3 ./build.py --compiler-launcher ccache 2>&1 | tee build.log
 
-          # Inspect what was produced
-          echo "== Workspace content =="
-          ls -la
-          echo "== Build tree (top 3 levels) =="
-          find . -maxdepth 3 -type d -print
+          echo "== find top-level build dirs =="
+          find . -maxdepth 2 -type d -name "Build*" -print || true
 
-          # Collect outputs into a predictable folder
+          # Stage artifacts (search widely to catch JUCE/plugdata output paths)
           mkdir -p Build-macOS-Universal
 
-          # Copy common macOS bundles if they exist
-          find . -type d \( -name "*.app" -o -name "*.vst3" -o -name "*.component" -o -name "*.clap" -o -name "*.lv2" \) -print \
-            -exec cp -R {} Build-macOS-Universal/ \; || true
+          echo "== searching for bundles =="
+          find . -type d \( -name "*.app" -o -name "*.vst3" -o -name "*.component" -o -name "*.clap" -o -name "*.lv2" \) \
+            -not -path "./.git/*" -print -exec cp -R "{}" Build-macOS-Universal/ \; || true
 
-          # If the exporter produced a generic Build folder, include it
-          if [ -d Build ]; then
-            echo "Found generic Build/, moving to Build-macOS-Universal/"
-            mv Build/* Build-macOS-Universal/ || true
+          # If a generic Build/ exists and is non-empty, copy its contents (use dot to preserve structure)
+          if [ -d Build ] && [ -n "$(ls -A Build 2>/dev/null || true)" ]; then
+            echo "Found generic Build/, copying contents to Build-macOS-Universal/"
+            cp -R Build/. Build-macOS-Universal/ || true
           fi
 
-          echo "== Staged artifacts =="
+          # Always keep the build log
+          cp build.log Build-macOS-Universal/ || true
+
+          echo "== staged contents =="
           find Build-macOS-Universal -maxdepth 2 -print || true
+
+          # Hard fail if nothing was staged so we see the real cause in logs
+          if [ -z "$(find Build-macOS-Universal -mindepth 1 -print -quit)" ]; then
+            echo "No artifacts were staged. Last 200 lines of build.log:"
+            tail -n 200 build.log || true
+            exit 1
+          fi
 
       - name: Archive Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Build-macOS-Universal
           path: Build-macOS-Universal/**
-          if-no-files-found: warn
+          if-no-files-found: error
           compression-level: 0
 
   windows-64-build:
@@ -74,6 +84,7 @@ jobs:
       - name: Init required submodules only
         shell: bash
         run: |
+          set -euxo pipefail
           git submodule update --init plugdata
           git -C plugdata submodule update --init Libraries/JUCE
 
@@ -94,21 +105,32 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          python3 ./build.py --compiler-launcher ccache
+          python3 ./build.py --compiler-launcher ccache 2>&1 | tee build.log
+
           mkdir -p Build-Win64
-          # Collect common Windows plugin bundles (if any specific structure exists, adjust here)
-          if [ -d Build ]; then
-            mv Build/* Build-Win64/ || true
+
+          # Collect common Windows plugin bundles or contents of Build/
+          if [ -d Build ] && [ -n "$(ls -A Build 2>/dev/null || true)" ]; then
+            cp -R Build/. Build-Win64/ || true
           fi
-          echo "== Staged artifacts (Win64) =="
+
+          cp build.log Build-Win64/ || true
+
+          echo "== staged contents (Win64) =="
           find Build-Win64 -maxdepth 2 -print || true
+
+          if [ -z "$(find Build-Win64 -mindepth 1 -print -quit)" ]; then
+            echo "No artifacts were staged (Win64). Last 200 lines of build.log:"
+            tail -n 200 build.log || true
+            exit 1
+          fi
 
       - name: Archive Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Build-Win64
           path: Build-Win64/**
-          if-no-files-found: warn
+          if-no-files-found: error
 
   windows-32-build:
     runs-on: windows-2022
@@ -122,6 +144,7 @@ jobs:
       - name: Init required submodules only
         shell: bash
         run: |
+          set -euxo pipefail
           git submodule update --init plugdata
           git -C plugdata submodule update --init Libraries/JUCE
 
@@ -142,20 +165,29 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          python3 ./build.py --compiler-launcher ccache
+          python3 ./build.py --compiler-launcher ccache 2>&1 | tee build.log
+
           mkdir -p Build-Win32
-          if [ -d Build ]; then
-            mv Build/* Build-Win32/ || true
+          if [ -d Build ] && [ -n "$(ls -A Build 2>/dev/null || true)" ]; then
+            cp -R Build/. Build-Win32/ || true
           fi
-          echo "== Staged artifacts (Win32) =="
+          cp build.log Build-Win32/ || true
+
+          echo "== staged contents (Win32) =="
           find Build-Win32 -maxdepth 2 -print || true
+
+          if [ -z "$(find Build-Win32 -mindepth 1 -print -quit)" ]; then
+            echo "No artifacts were staged (Win32). Last 200 lines of build.log:"
+            tail -n 200 build.log || true
+            exit 1
+          fi
 
       - name: Archive Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Build-Win32
           path: Build-Win32/**
-          if-no-files-found: warn
+          if-no-files-found: error
 
   linux-x64-build:
     name: ${{ matrix.name }}
@@ -217,6 +249,7 @@ jobs:
       - name: Init required submodules only
         shell: bash
         run: |
+          set -euxo pipefail
           git submodule update --init plugdata
           git -C plugdata submodule update --init Libraries/JUCE
 
@@ -230,22 +263,32 @@ jobs:
           key: ${{ matrix.name }}
 
       - name: Build plugins
+        shell: bash
         run: |
           set -euxo pipefail
-          python3 ./build.py --compiler-launcher ccache
+          python3 ./build.py --compiler-launcher ccache 2>&1 | tee build.log
+
           mkdir -p Build-${{ matrix.name }}
-          if [ -d Build ]; then
-            mv Build/* Build-${{ matrix.name }}/ || true
+          if [ -d Build ] && [ -n "$(ls -A Build 2>/dev/null || true)" ]; then
+            cp -R Build/. Build-${{ matrix.name }}/ || true
           fi
-          echo "== Staged artifacts (${ { matrix.name }} ) =="
+          cp build.log Build-${{ matrix.name }}/ || true
+
+          echo "== staged contents (${{ matrix.name }}) =="
           find Build-${{ matrix.name }} -maxdepth 2 -print || true
+
+          if [ -z "$(find Build-${{ matrix.name }} -mindepth 1 -print -quit)" ]; then
+            echo "No artifacts were staged (${{ matrix.name }}). Last 200 lines of build.log:"
+            tail -n 200 build.log || true
+            exit 1
+          fi
 
       - name: Archive Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Build-${{ matrix.name }}
           path: Build-${{ matrix.name }}/**
-          if-no-files-found: warn
+          if-no-files-found: error
 
   linux-arm-build:
     name: ${{ matrix.name }}
@@ -293,6 +336,7 @@ jobs:
       - name: Init required submodules only
         shell: bash
         run: |
+          set -euxo pipefail
           git submodule update --init plugdata
           git -C plugdata submodule update --init Libraries/JUCE
 
@@ -306,19 +350,29 @@ jobs:
           key: ${{ matrix.name }}
 
       - name: Build plugins
+        shell: bash
         run: |
           set -euxo pipefail
-          python3 ./build.py --compiler-launcher ccache
+          python3 ./build.py --compiler-launcher ccache 2>&1 | tee build.log
+
           mkdir -p Build-${{ matrix.name }}
-          if [ -d Build ]; then
-            mv Build/* Build-${{ matrix.name }}/ || true
+          if [ -d Build ] && [ -n "$(ls -A Build 2>/dev/null || true)" ]; then
+            cp -R Build/. Build-${{ matrix.name }}/ || true
           fi
-          echo "== Staged artifacts (${ { matrix.name }} ) =="
+          cp build.log Build-${{ matrix.name }}/ || true
+
+          echo "== staged contents (${{ matrix.name }}) =="
           find Build-${{ matrix.name }} -maxdepth 2 -print || true
+
+          if [ -z "$(find Build-${{ matrix.name }} -mindepth 1 -print -quit)" ]; then
+            echo "No artifacts were staged (${{ matrix.name }}). Last 200 lines of build.log:"
+            tail -n 200 build.log || true
+            exit 1
+          fi
 
       - name: Archive Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Build-${{ matrix.name }}
           path: Build-${{ matrix.name }}/**
-          if-no-files-found: warn
+          if-no-files-found: error
