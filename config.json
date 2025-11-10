@@ -1,6 +1,6 @@
 [
   {
-    "name": "AlephSampler",
+    "name": "plugdata-fx",
     "author": "Aleph",
     "path": "Plugins/AlephSampler.zip",
     "formats": ["VST3", "AU", "LV2", "CLAP", "Standalone"],
