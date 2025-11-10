@@ -16,12 +16,29 @@ jobs:
           fetch-depth: 0
           submodules: false  # avoid recursive checkout (Gem causes 500 errors)
 
-      - name: Init required submodules only
+      - name: Init submodules (sync, exclude Gem)
         shell: bash
         run: |
           set -euxo pipefail
+
+          # Ensure the submodule points at *your fork* and URLs are up to date
+          git submodule sync --recursive
+
+          # Init top-level plugdata submodule
           git submodule update --init plugdata
+
+          # Disable Gem (and its nested .git-ci) so CI never tries to hit git.iem.at
+          git -C plugdata config submodule.Libraries/Gem.update none || true
+          git -C plugdata config submodule.Libraries/Gem/.git-ci/iem-ci.update none || true
+
+          # Recursively fetch ALL required libraries (fftw3, libwebp, xz, nanovg, melatonin_blur, JUCE, etc.)
+          git -C plugdata submodule update --init --recursive --jobs 8 Libraries
+
+          # Belt-and-suspenders: make sure JUCE is present
           git -C plugdata submodule update --init Libraries/JUCE
+
+          # Show what we actually pulled (helps debug)
+          git -C plugdata submodule status --recursive || true
 
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -81,12 +98,29 @@ jobs:
           fetch-depth: 0
           submodules: false
 
-      - name: Init required submodules only
+      - name: Init submodules (sync, exclude Gem)
         shell: bash
         run: |
           set -euxo pipefail
+
+          # Ensure the submodule points at *your fork* and URLs are up to date
+          git submodule sync --recursive
+
+          # Init top-level plugdata submodule
           git submodule update --init plugdata
+
+          # Disable Gem (and its nested .git-ci) so CI never tries to hit git.iem.at
+          git -C plugdata config submodule.Libraries/Gem.update none || true
+          git -C plugdata config submodule.Libraries/Gem/.git-ci/iem-ci.update none || true
+
+          # Recursively fetch ALL required libraries (fftw3, libwebp, xz, nanovg, melatonin_blur, JUCE, etc.)
+          git -C plugdata submodule update --init --recursive --jobs 8 Libraries
+
+          # Belt-and-suspenders: make sure JUCE is present
           git -C plugdata submodule update --init Libraries/JUCE
+
+          # Show what we actually pulled (helps debug)
+          git -C plugdata submodule status --recursive || true
 
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -141,12 +175,29 @@ jobs:
           fetch-depth: 0
           submodules: false
 
-      - name: Init required submodules only
+      - name: Init submodules (sync, exclude Gem)
         shell: bash
         run: |
           set -euxo pipefail
+
+          # Ensure the submodule points at *your fork* and URLs are up to date
+          git submodule sync --recursive
+
+          # Init top-level plugdata submodule
           git submodule update --init plugdata
+
+          # Disable Gem (and its nested .git-ci) so CI never tries to hit git.iem.at
+          git -C plugdata config submodule.Libraries/Gem.update none || true
+          git -C plugdata config submodule.Libraries/Gem/.git-ci/iem-ci.update none || true
+
+          # Recursively fetch ALL required libraries (fftw3, libwebp, xz, nanovg, melatonin_blur, JUCE, etc.)
+          git -C plugdata submodule update --init --recursive --jobs 8 Libraries
+
+          # Belt-and-suspenders: make sure JUCE is present
           git -C plugdata submodule update --init Libraries/JUCE
+
+          # Show what we actually pulled (helps debug)
+          git -C plugdata submodule status --recursive || true
 
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
