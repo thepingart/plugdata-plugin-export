@@ -1,0 +1,4 @@
+[submodule "plugdata"]
+	path = plugdata
+	url = https://github.com/thepingart/plugdata.git
+	branch = develop
