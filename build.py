@@ -125,6 +125,20 @@ for plugin in plugins_config:
                     if os.path.exists(target_dir):
                         shutil.rmtree(target_dir)
                     shutil.copytree(format_path, target_dir)
+
+                    # ---- Embed Pd patch zip into the .app bundle ----
+                    app_bundle = Path(target_dir) / f"{name}.app"
+                    patch_zip = Path(plugin["path"]).resolve()
+
+                    if app_bundle.exists() and patch_zip.exists():
+                        resources_dir = app_bundle / "Contents" / "Resources"
+                        os.makedirs(resources_dir, exist_ok=True)
+                        dst_patch = resources_dir / Path(patch_zip.name)
+                        shutil.copy2(patch_zip, dst_patch)
+                        print(f"✅ Embedded patch zip into {resources_dir}")
+                    else:
+                        print("⚠️ Could not embed patch zip — app or patch missing")
+
             else:
                 extension = ""
                 if fmt == "VST3":
